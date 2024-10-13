@@ -1,6 +1,7 @@
 #include "ParseFormula.h"
 #include <string.h>
 #include <string>
+#include <sstream>
 
 ParseFormula::ParseFormula(string *str) {
   ifstream formulaFile(*str);
@@ -8,6 +9,10 @@ ParseFormula::ParseFormula(string *str) {
   getline(formulaFile, s);
   file = &s;
   formulaFile.close();
+}
+
+ParseFormula::ParseFormula(string str) {
+  file = &str;
 }
 
 ParseFormula::~ParseFormula() { // Deletion happens in main
@@ -19,6 +24,16 @@ char ParseFormula::getChar() {
     return file->at(index);
   }
   return '%';
+}
+
+vector<int> ParseFormula::split(string &s, char delimiter) {     
+    vector<int> tokens;     
+    string token;     
+    istringstream tokenStream(s);     
+    while (getline(tokenStream, token, delimiter)) {      
+        tokens.push_back(stoi(token));     
+    }     
+    return tokens;  
 }
 
 shared_ptr<Formula> ParseFormula::parseRest() {
@@ -45,9 +60,11 @@ shared_ptr<Formula> ParseFormula::parseRest() {
     ++index;
 
     return inside;
-  } else if (getChar() == '[') {
-    ++index;
+  } 
+  else if (getChar() == 'K') {
+    index+=2;
     string modality;
+    getChar();
     if (getChar() == '-') {
       modality = "-";
       ++index;
@@ -75,27 +92,30 @@ shared_ptr<Formula> ParseFormula::parseRest() {
     shared_ptr<Formula> rest = parseRest();
 
     if (modality == "") {
-      if (rest->getType() == FBox) {
-        Box *restBox = dynamic_cast<Box *>(rest.get());
-        if (restBox->getModality() == 1) {
-          restBox->incrementPower();
+      if (rest->getType() == FKnow) {
+        Know *restKnow = dynamic_cast<Know *>(rest.get());
+        if (restKnow->getModality() == 1) {
+          restKnow->incrementPower();
           return rest;
         }
       }
-      return Box::create(1, 1, rest);
+      return Know::create(1, 1, rest);
     } else {
-      if (rest->getType() == FBox) {
-        Box *restBox = dynamic_cast<Box *>(rest.get());
-        if (restBox->getModality() == stoi(modality)) {
-          restBox->incrementPower();
+      if (rest->getType() == FKnow) {
+        Know *restKnow = dynamic_cast<Know *>(rest.get());
+        if (restKnow->getModality() == stoi(modality)) {
+          restKnow->incrementPower();
           return rest;
         }
       }
-      return Box::create(stoi(modality), 1, rest);
+      return Know::create(stoi(modality), 1, rest);
     }
-  } else if (getChar() == '<') {
-    ++index;
+  } 
+
+  else if (getChar() == 'D') {
+    index+=2;
     string modality;
+    getChar();
     if (getChar() == '-') {
       modality = "-";
       ++index;
@@ -103,12 +123,14 @@ shared_ptr<Formula> ParseFormula::parseRest() {
       string modality = "";
     }
 
-    while (isdigit(getChar())) {
+    while (isdigit(getChar()) || getChar() == ',') {
+      
       modality += getChar();
+      cout << modality << "\n";
       ++index;
     }
 
-    if (getChar() != '>') {
+    if (getChar() != ']') {
       if (getChar() == '%') {
         throw runtime_error("Unexpected character at position " +
                             to_string(index) +
@@ -123,34 +145,214 @@ shared_ptr<Formula> ParseFormula::parseRest() {
     shared_ptr<Formula> rest = parseRest();
 
     if (modality == "") {
-      if (rest->getType() == FDiamond) {
-        Diamond *restDiamond = dynamic_cast<Diamond *>(rest.get());
-        if (restDiamond->getModality() == 1) {
-          restDiamond->incrementPower();
+      if (rest->getType() == FDistributed) {
+        Distributed *restDistributed = dynamic_cast<Distributed *>(rest.get());
+        if (restDistributed->getModalityListString() == "1") {
+          restDistributed->incrementPower();
           return rest;
         }
       }
-      return Diamond::create(1, 1, rest);
+      vector<int> newModalityList = {1};
+      return Distributed::create(newModalityList, 1, rest);
     } else {
-      if (rest->getType() == FDiamond) {
-        Diamond *restDiamond = dynamic_cast<Diamond *>(rest.get());
-        if (restDiamond->getModality() == stoi(modality)) {
-          restDiamond->incrementPower();
+      if (rest->getType() == FDistributed) {
+        Distributed *restDistributed = dynamic_cast<Distributed *>(rest.get());
+        if (restDistributed->getModalityListString() == modality) {
+          restDistributed->incrementPower();
           return rest;
         }
       }
-      return Diamond::create(stoi(modality), 1, rest);
+      vector<int> newModalityList = split(modality, ',');
+
+      //create a new K formula if the group size is 1
+      if(newModalityList.size() == 1){
+        return Know::create(newModalityList[0], 1, rest);
+      }
+
+      /*for(int charNum = 0, strBeginning=0; charNum < modality.length(); charNum++){
+        //cout << charNum << '\n';
+        if(modality.at(charNum) ==',' || modality.at(charNum)=='\0'){
+          cout << modality.substr(strBeginning, charNum - strBeginning) << '\n';
+          newModalityList.push_back(stoi(modality.substr(strBeginning, charNum - strBeginning)));
+          strBeginning = charNum + 1;
+        }
+      }*/
+      return Distributed::create(newModalityList, 1, rest);
     }
-  } else if (getChar() == '~') {
+  } 
+  else if (getChar() == '?') {
+    index+=2;
+    string modality;
+
+    getChar();
+    if (getChar() == '-') {
+      modality = "-";
+      ++index;
+    } else {
+      string modality = "";
+    }
+
+    while (isdigit(getChar())) {
+      modality += getChar();
+      ++index;
+    }
+
+    if (getChar() != ']') {
+      if (getChar() == '%') {
+        throw runtime_error("Unexpected character at position " +
+                            to_string(index) +
+                            " got end of file but expected >");
+      }
+      throw runtime_error("Unexpected character at position " +
+                          to_string(index) + " got " + getChar() +
+                          " but expected >");
+    }
+    ++index;
+
+    shared_ptr<Formula> rest = parseRest();
+
+    if (modality == "") {
+      if (rest->getType() == FNotKnow) {
+        NotKnow *restNotKnow = dynamic_cast<NotKnow *>(rest.get());
+        if (restNotKnow->getModality() == 1) {
+          restNotKnow->incrementPower();
+          return rest;
+        }
+      }
+      return NotKnow::create(1, 1, rest);
+    } else {
+      if (rest->getType() == FNotKnow) {
+        NotKnow *restNotKnow = dynamic_cast<NotKnow *>(rest.get());
+        if (restNotKnow->getModality() == stoi(modality)) {
+          restNotKnow->incrementPower();
+          return rest;
+        }
+      }
+      return NotKnow::create(stoi(modality), 1, rest);
+    }
+  } 
+  else if (file->substr(index, 3) == "~K[") {
+    index+=3;
+    string modality;
+    
+    getChar();
+    if (getChar() == '-') {
+      modality = "-";
+      ++index;
+    } else {
+      string modality = "";
+    }
+
+    while (isdigit(getChar())) {
+      modality += getChar();
+      ++index;
+    }
+
+    if (getChar() != ']') {
+      if (getChar() == '%') {
+        throw runtime_error("Unexpected character at position " +
+                            to_string(index) +
+                            " got end of file but expected >");
+      }
+      throw runtime_error("Unexpected character at position " +
+                          to_string(index) + " got " + getChar() +
+                          " but expected >");
+    }
+    ++index;
+
+    shared_ptr<Formula> rest = parseRest()->negate();
+
+    if (modality == "") {
+      if (rest->getType() == FNotKnow) {
+        NotKnow *restNotKnow = dynamic_cast<NotKnow *>(rest.get());
+        if (restNotKnow->getModality() == 1) {
+          restNotKnow->incrementPower();
+          return rest;
+        }
+      }
+      return NotKnow::create(1, 1, rest);
+    } else {
+      if (rest->getType() == FNotKnow) {
+        NotKnow *restNotKnow = dynamic_cast<NotKnow *>(rest.get());
+        if (restNotKnow->getModality() == stoi(modality)) {
+          restNotKnow->incrementPower();
+          return rest;
+        }
+      }
+      return NotKnow::create(stoi(modality), 1, rest);
+    }
+  } 
+  else if (file->substr(index, 3) == "~D[") {
+    index+=3;
+    string modality;
+    
+    getChar();
+    if (getChar() == '-') {
+      modality = "-";
+      ++index;
+    } else {
+      string modality = "";
+    }
+
+    while (isdigit(getChar())) {
+      modality += getChar();
+      ++index;
+    }
+
+    if (getChar() != ']') {
+      if (getChar() == '%') {
+        throw runtime_error("Unexpected character at position " +
+                            to_string(index) +
+                            " got end of file but expected >");
+      }
+      throw runtime_error("Unexpected character at position " +
+                          to_string(index) + " got " + getChar() +
+                          " but expected >");
+    }
+    ++index;
+
+    shared_ptr<Formula> rest = parseRest()->negate();
+
+    if (modality == "") {
+      if (rest->getType() == FNotDistributed) {
+        NotDistributed *restNotDistributed = dynamic_cast<NotDistributed *>(rest.get());
+        if (restNotDistributed->getModalityListString() == "1") {
+          restNotDistributed->incrementPower();
+          return rest;
+        }
+      }
+      vector<int> newModalityList = {1};
+      return NotDistributed::create(newModalityList, 1, rest);
+    } else {
+      if (rest->getType() == FNotDistributed) {
+        NotDistributed *restNotDistributed = dynamic_cast<NotDistributed *>(rest.get());
+        if (restNotDistributed->getModalityListString() == (modality)) {
+          restNotDistributed->incrementPower();
+          return rest;
+        }
+      }
+
+      vector<int> newModalityList = split(modality, ',');
+
+      if(newModalityList.size() == 1){
+        return NotKnow::create(newModalityList[0], 1, rest);
+      }
+      return NotDistributed::create(newModalityList, 1, rest);
+    }
+  } 
+  else if (getChar() == '~') {
     ++index;
     return Not::create(parseRest());
-  } else if (file->substr(index, 5) == "$true") {
+  } 
+  else if (file->substr(index, 5) == "$true") {
     index += 5;
     return True::create();
-  } else if (file->substr(index, 6) == "$false") {
+  } 
+  else if (file->substr(index, 6) == "$false") {
     index += 6;
     return False::create();
-  } else if (isalnum(getChar()) || getChar() == '_') {
+  } 
+  else if (isalnum(getChar()) || getChar() == '_') {
     string name = "";
 
     while (isalnum(getChar()) || getChar() == '_') {

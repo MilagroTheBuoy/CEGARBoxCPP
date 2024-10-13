@@ -10,6 +10,9 @@
 #include "../Formula/Not/Not.h"
 #include "../Formula/Or/Or.h"
 #include "../Formula/True/True.h"
+#include "../Formula/Know/Know.h"
+#include "../Formula/NotKnow/NotKnow.h"
+#include "../Formula/Distributed/Distributed.h"
 #include <assert.h>
 #include <fstream>
 #include <memory>
@@ -26,6 +29,7 @@ private:
   shared_ptr<Formula> parseOr();
   shared_ptr<Formula> parseAnd();
   shared_ptr<Formula> parseRest();
+  vector<int> split(string &s, char delimiter);
 
   char getChar();
 
@@ -36,6 +40,7 @@ private:
 
 public:
   ParseFormula(string *str);
+  ParseFormula(string str); 
   ~ParseFormula();
 
   shared_ptr<Formula> parseFormula();
